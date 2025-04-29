@@ -1,0 +1,4 @@
+flask
+requests
+boto3
+google-cloud-texttospeech
