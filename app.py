@@ -10,12 +10,10 @@ import tempfile
 from io import BytesIO
 from dotenv import load_dotenv
 from flask_cors import CORS
-
-app = Flask(__name__)
-CORS(app)  # Cho phép tất cả origin gọi API này
 load_dotenv()
-
 app = Flask(__name__)
+
+CORS(app)  # Cho phép tất cả origin gọi API này
 
 # Load API keys from .env
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
