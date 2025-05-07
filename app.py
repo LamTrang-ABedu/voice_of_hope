@@ -1,73 +1,121 @@
 # tts_microservice/app.py
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 import requests
-from gtts import gTTS
-from pydub import AudioSegment
 import os
 import uuid
-import tempfile
 from io import BytesIO
 from dotenv import load_dotenv
 from flask_cors import CORS
+import json
+from gtts import gTTS
+from pydub import AudioSegment
+from gtts.lang import tts_langs
+
 load_dotenv()
+
 app = Flask(__name__)
+CORS(app)
 
-CORS(app)  # Cho phép tất cả origin gọi API này
-
-# Load API keys from .env
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 AZURE_TTS_KEY = os.getenv("AZURE_TTS_KEY")
 AZURE_TTS_REGION = os.getenv("AZURE_TTS_REGION")
 
-
 @app.route("/api/voices", methods=["GET"])
 def get_voices():
-    # 1. Try ElevenLabs
+    result = {"default": "azure", "providers": {}}
+
+    try:
+        headers = {"Ocp-Apim-Subscription-Key": AZURE_TTS_KEY}
+        url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list"
+        r = requests.get(url, headers=headers)
+        if r.status_code == 200:
+            result["providers"]["azure"] = r.json()
+    except Exception:
+        result["default"] = "elevenlabs"
+
     try:
         headers = {"xi-api-key": ELEVENLABS_API_KEY}
         r = requests.get("https://api.elevenlabs.io/v1/voices", headers=headers)
         if r.status_code == 200:
-            voices = r.json()
-            return jsonify({"provider": "elevenlabs", "voices": voices})
+            result["providers"]["elevenlabs"] = r.json()
     except Exception:
-        pass
+        if result["default"] != "azure":
+            result["default"] = "gtts"
 
-    # 2. Try Azure
     try:
-        headers = {
-            "Ocp-Apim-Subscription-Key": AZURE_TTS_KEY
-        }
-        url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list"
-        r = requests.get(url, headers=headers)
-        if r.status_code == 200:
-            voices = r.json()
-            return jsonify({"provider": "azure", "voices": voices})
+        result["providers"]["gtts"] = tts_langs()
     except Exception:
-        pass
+        result["providers"]["gtts"] = {}
 
-    # 3. Fallback: gTTS static list
-    from gtts.lang import tts_langs
-    voices = tts_langs()
-    return jsonify({"provider": "gtts", "voices": voices})
-
+    return jsonify(result)
 
 @app.route("/api/tts", methods=["POST"])
 def tts_api():
     data = request.get_json()
     text = data.get("text")
-    voice = data.get("voice", "default")
-    language = data.get("language", "en")
+    voice = data.get("voice")
+    language = data.get("language", "en-US")
     speed = float(data.get("speed", 1.0))
-    provider = data.get("provider", "elevenlabs")
+    provider = data.get("provider", "azure")
 
     if not text:
         return jsonify({"error": "Missing 'text' field"}), 400
 
-    audio_stream = BytesIO()
+    if provider == "azure" and AZURE_TTS_KEY:
+        try:
+            token_url = f"https://{AZURE_TTS_REGION}.api.cognitive.microsoft.com/sts/v1.0/issueToken"
+            headers = {"Ocp-Apim-Subscription-Key": AZURE_TTS_KEY}
+            token = requests.post(token_url, headers=headers).text
 
-    try:
-        if provider == "elevenlabs" and ELEVENLABS_API_KEY:
+            ssml = f"""
+            <speak version='1.0' xml:lang='{language}'>
+              <voice name='{voice}'>
+                <prosody rate='{(speed - 1) * 100:+.0f}%'>
+                  {text}
+                </prosody>
+              </voice>
+            </speak>
+            """
+
+            # speech marks (word timestamps)
+            marks_headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/ssml+xml",
+                "X-Microsoft-OutputFormat": "json"
+            }
+            marks_url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/streaming"
+            marks_response = requests.post(marks_url, headers=marks_headers, data=ssml.encode("utf-8"))
+            word_timings = marks_response.json() if marks_response.status_code == 200 else []
+
+            # audio
+            synth_url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1"
+            audio_headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/ssml+xml",
+                "X-Microsoft-OutputFormat": "audio-16khz-32kbitrate-mono-mp3"
+            }
+            audio_response = requests.post(synth_url, headers=audio_headers, data=ssml.encode("utf-8"))
+
+            if audio_response.status_code != 200:
+                raise Exception("Azure audio failed")
+
+            def generate():
+                yield b"--ttsboundary\r\n"
+                yield b"Content-Type: application/json\r\n\r\n"
+                yield json.dumps(word_timings).encode("utf-8")
+                yield b"\r\n--ttsboundary\r\n"
+                yield b"Content-Type: audio/mpeg\r\n\r\n"
+                yield audio_response.content
+                yield b"\r\n--ttsboundary--"
+
+            return Response(generate(), mimetype="multipart/mixed; boundary=ttsboundary")
+
+        except Exception:
+            pass
+
+    if provider == "elevenlabs" and ELEVENLABS_API_KEY:
+        try:
             url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}"
             headers = {
                 "xi-api-key": ELEVENLABS_API_KEY,
@@ -84,59 +132,26 @@ def tts_api():
             }
             r = requests.post(url, headers=headers, json=payload, stream=True)
             if r.status_code == 200:
-                for chunk in r.iter_content(chunk_size=1024):
-                    if chunk:
-                        audio_stream.write(chunk)
-                audio_stream.seek(0)
-            else:
-                raise Exception("ElevenLabs TTS failed")
+                return Response(r.iter_content(chunk_size=1024), mimetype="audio/mpeg")
+        except Exception:
+            pass
 
-        elif provider == "azure" and AZURE_TTS_KEY:
-            token_url = f"https://{AZURE_TTS_REGION}.api.cognitive.microsoft.com/sts/v1.0/issueToken"
-            headers = {"Ocp-Apim-Subscription-Key": AZURE_TTS_KEY}
-            token = requests.post(token_url, headers=headers).text
-            synth_url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1"
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/ssml+xml",
-                "X-Microsoft-OutputFormat": "audio-16khz-32kbitrate-mono-mp3"
-            }
-            ssml = f"""
-            <speak version='1.0' xml:lang='{language}'>
-                <voice name='{voice}'>
-                    <prosody rate='{(speed - 1) * 100:+.0f}%'>
-                        {text}
-                    </prosody>
-                </voice>
-            </speak>
-            """
-            r = requests.post(synth_url, headers=headers, data=ssml.encode('utf-8'))
-            if r.status_code == 200:
-                audio_stream.write(r.content)
-                audio_stream.seek(0)
-            else:
-                raise Exception("Azure TTS failed")
+    # fallback gTTS
+    tts = gTTS(text=text, lang=language.split("-")[0])
+    audio_stream = BytesIO()
+    tts.write_to_fp(audio_stream)
+    audio_stream.seek(0)
+    if speed != 1.0:
+        sound = AudioSegment.from_file(audio_stream, format="mp3")
+        adjusted = sound._spawn(sound.raw_data, overrides={
+            "frame_rate": int(sound.frame_rate * speed)
+        }).set_frame_rate(sound.frame_rate)
+        result = BytesIO()
+        adjusted.export(result, format="mp3")
+        result.seek(0)
+        return send_file(result, mimetype="audio/mpeg")
 
-        else:
-            tts = gTTS(text=text, lang=language)
-            tts_fp = BytesIO()
-            tts.write_to_fp(tts_fp)
-            tts_fp.seek(0)
-
-            if speed != 1.0:
-                sound = AudioSegment.from_file(tts_fp, format="mp3")
-                adjusted = sound._spawn(sound.raw_data, overrides={
-                    "frame_rate": int(sound.frame_rate * speed)
-                }).set_frame_rate(sound.frame_rate)
-                adjusted.export(audio_stream, format="mp3")
-            else:
-                audio_stream = tts_fp
-
-        return send_file(audio_stream, mimetype="audio/mpeg")
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+    return send_file(audio_stream, mimetype="audio/mpeg")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
