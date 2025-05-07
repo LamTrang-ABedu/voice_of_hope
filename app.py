@@ -23,30 +23,42 @@ AZURE_TTS_REGION = os.getenv("AZURE_TTS_REGION")
 
 @app.route("/api/voices", methods=["GET"])
 def get_voices():
-    result = {"default": "azure", "providers": {}}
+    result = {"default": None, "providers": {}}
 
+    # Try Azure first
     try:
         headers = {"Ocp-Apim-Subscription-Key": AZURE_TTS_KEY}
         url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list"
         r = requests.get(url, headers=headers)
         if r.status_code == 200:
-            result["providers"]["azure"] = r.json()
+            voices = r.json()
+            result["providers"]["azure"] = voices
+            result["default"] = "azure"
     except Exception:
-        result["default"] = "elevenlabs"
+        pass
 
+    # Then ElevenLabs
     try:
         headers = {"xi-api-key": ELEVENLABS_API_KEY}
         r = requests.get("https://api.elevenlabs.io/v1/voices", headers=headers)
         if r.status_code == 200:
-            result["providers"]["elevenlabs"] = r.json()
+            voices = r.json()
+            result["providers"]["elevenlabs"] = voices
+            if not result["default"]:
+                result["default"] = "elevenlabs"
     except Exception:
-        if result["default"] != "azure":
-            result["default"] = "gtts"
+        pass
 
+    # Then gTTS
     try:
-        result["providers"]["gtts"] = tts_langs()
+        voices = tts_langs()
+        result["providers"]["gtts"] = voices
+        if not result["default"]:
+            result["default"] = "gtts"
     except Exception:
         result["providers"]["gtts"] = {}
+        if not result["default"]:
+            result["default"] = "gtts"
 
     return jsonify(result)
 
