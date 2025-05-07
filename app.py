@@ -27,8 +27,8 @@ def get_voices():
 
     # Try Azure first
     try:
-        headers = {"Ocp-Apim-Subscription-Key": AZURE_TTS_KEY}
-        url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list"
+        headers = {"Ocp-Apim-Subscription-Key": os.getenv("AZURE_TTS_KEY")}
+        url = f"https://{os.getenv("AZURE_TTS_REGION")}.tts.speech.microsoft.com/cognitiveservices/voices/list"
         r = requests.get(url, headers=headers)
         print("Azure voice status:", r.status_code)
         if r.status_code == 200:
@@ -37,12 +37,13 @@ def get_voices():
             result["providers"]["azure"] = voices
             result["default"] = "azure"
             print("providers default:", result["default"])
-    except Exception:
+    except Exception as e:
+        print(f"[WARN] Failed to fetch azure : {e}")
         pass
 
     # Then ElevenLabs
     try:
-        headers = {"xi-api-key": ELEVENLABS_API_KEY}
+        headers = {"xi-api-key": os.getenv("ELEVENLABS_API_KEY")}
         r = requests.get("https://api.elevenlabs.io/v1/voices", headers=headers)
         if r.status_code == 200:
             voices = r.json()
@@ -77,10 +78,10 @@ def tts_api():
     if not text:
         return jsonify({"error": "Missing 'text' field"}), 400
 
-    if provider == "azure" and AZURE_TTS_KEY:
+    if provider == "azure" and os.getenv("AZURE_TTS_KEY"):
         try:
-            token_url = f"https://{AZURE_TTS_REGION}.api.cognitive.microsoft.com/sts/v1.0/issueToken"
-            headers = {"Ocp-Apim-Subscription-Key": AZURE_TTS_KEY}
+            token_url = f"https://{os.getenv("AZURE_TTS_REGION")}.api.cognitive.microsoft.com/sts/v1.0/issueToken"
+            headers = {"Ocp-Apim-Subscription-Key": os.getenv("AZURE_TTS_KEY")}
             token = requests.post(token_url, headers=headers).text
 
             ssml = f"""
@@ -97,12 +98,12 @@ def tts_api():
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "json"
             }
-            marks_url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/streaming"
+            marks_url = f"https://{os.getenv("AZURE_TTS_REGION")}.tts.speech.microsoft.com/cognitiveservices/voices/streaming"
             marks_response = requests.post(marks_url, headers=marks_headers, data=ssml.encode("utf-8"))
             word_timings = marks_response.json() if marks_response.status_code == 200 else []
 
             # audio
-            synth_url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1"
+            synth_url = f"https://{os.getenv("AZURE_TTS_REGION")}.tts.speech.microsoft.com/cognitiveservices/v1"
             audio_headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/ssml+xml",
@@ -127,11 +128,11 @@ def tts_api():
         except Exception:
             pass
 
-    if provider == "elevenlabs" and ELEVENLABS_API_KEY:
+    if provider == "elevenlabs" and os.getenv("ELEVENLABS_API_KEY"):
         try:
             url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice}"
             headers = {
-                "xi-api-key": ELEVENLABS_API_KEY,
+                "xi-api-key": os.getenv("ELEVENLABS_API_KEY"),
                 "Content-Type": "application/json"
             }
             payload = {
