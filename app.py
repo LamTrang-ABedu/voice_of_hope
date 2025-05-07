@@ -91,7 +91,7 @@ def tts_api():
             </speak>
             """
 
-            # speech marks (word timestamps)
+            # get speech marks (streaming JSONL)
             marks_headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/ssml+xml",
@@ -99,9 +99,18 @@ def tts_api():
             }
             marks_url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/streaming"
             marks_response = requests.post(marks_url, headers=marks_headers, data=ssml.encode("utf-8"))
-            word_timings = marks_response.json() if marks_response.status_code == 200 else []
 
-            # audio
+            word_timings = []
+            if marks_response.status_code == 200:
+                for line in marks_response.text.strip().split("\n"):
+                    try:
+                        item = json.loads(line)
+                        if item.get("type") == "Word":
+                            word_timings.append(item)
+                    except:
+                        continue
+
+            # generate mp3
             synth_url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1"
             audio_headers = {
                 "Authorization": f"Bearer {token}",
@@ -124,8 +133,8 @@ def tts_api():
 
             return Response(generate(), mimetype="multipart/mixed; boundary=ttsboundary")
 
-        except Exception:
-            pass
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     if provider == "elevenlabs" and ELEVENLABS_API_KEY:
         try:
