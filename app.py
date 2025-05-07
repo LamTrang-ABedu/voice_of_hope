@@ -30,6 +30,7 @@ def get_voices():
         headers = {"Ocp-Apim-Subscription-Key": AZURE_TTS_KEY}
         url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list"
         r = requests.get(url, headers=headers)
+        print("Azure voice status:", r.status_code)
         if r.status_code == 200:
             print("Azure TTS voices fetched successfully")
             voices = r.json()
