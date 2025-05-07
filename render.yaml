@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: tts-microservice
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: AZURE_TTS_KEY
+        sync: false
+      - key: AZURE_TTS_REGION
+        sync: false
+    plan: free
+    autoDeploy: true
