@@ -109,7 +109,7 @@ def tts_api():
                             word_timings.append(item)
                     except:
                         continue
-
+            print("Word timings:", word_timings)
             # generate mp3
             synth_url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1"
             audio_headers = {
