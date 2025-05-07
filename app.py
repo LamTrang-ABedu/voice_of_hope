@@ -28,7 +28,7 @@ def get_voices():
     # Try Azure first
     try:
         headers = {"Ocp-Apim-Subscription-Key": os.getenv("AZURE_TTS_KEY")}
-        url = f"https://{os.getenv("AZURE_TTS_REGION")}.tts.speech.microsoft.com/cognitiveservices/voices/list"
+        url = f"https://{os.getenv('AZURE_TTS_REGION')}.tts.speech.microsoft.com/cognitiveservices/voices/list"
         r = requests.get(url, headers=headers)
         print("Azure voice status:", r.status_code)
         if r.status_code == 200:
@@ -80,7 +80,7 @@ def tts_api():
 
     if provider == "azure" and os.getenv("AZURE_TTS_KEY"):
         try:
-            token_url = f"https://{os.getenv("AZURE_TTS_REGION")}.api.cognitive.microsoft.com/sts/v1.0/issueToken"
+            token_url = f"https://{os.getenv('AZURE_TTS_REGION')}.api.cognitive.microsoft.com/sts/v1.0/issueToken"
             headers = {"Ocp-Apim-Subscription-Key": os.getenv("AZURE_TTS_KEY")}
             token = requests.post(token_url, headers=headers).text
 
@@ -98,12 +98,12 @@ def tts_api():
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "json"
             }
-            marks_url = f"https://{os.getenv("AZURE_TTS_REGION")}.tts.speech.microsoft.com/cognitiveservices/voices/streaming"
+            marks_url = f"https://{os.getenv('AZURE_TTS_REGION')}.tts.speech.microsoft.com/cognitiveservices/voices/streaming"
             marks_response = requests.post(marks_url, headers=marks_headers, data=ssml.encode("utf-8"))
             word_timings = marks_response.json() if marks_response.status_code == 200 else []
 
             # audio
-            synth_url = f"https://{os.getenv("AZURE_TTS_REGION")}.tts.speech.microsoft.com/cognitiveservices/v1"
+            synth_url = f"https://{os.getenv('AZURE_TTS_REGION')}.tts.speech.microsoft.com/cognitiveservices/v1"
             audio_headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/ssml+xml",
