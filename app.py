@@ -31,9 +31,11 @@ def get_voices():
         url = f"https://{AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/voices/list"
         r = requests.get(url, headers=headers)
         if r.status_code == 200:
+            print("Azure TTS voices fetched successfully")
             voices = r.json()
             result["providers"]["azure"] = voices
             result["default"] = "azure"
+            print("providers default:", result["default"])
     except Exception:
         pass
 
@@ -46,6 +48,7 @@ def get_voices():
             result["providers"]["elevenlabs"] = voices
             if not result["default"]:
                 result["default"] = "elevenlabs"
+                print("providers default:", result["default"])
     except Exception:
         pass
 
@@ -68,7 +71,6 @@ def tts_api():
     text = data.get("text")
     voice = data.get("voice")
     language = data.get("language", "en-US")
-    speed = float(data.get("speed", 1.0))
     provider = data.get("provider", "azure")
 
     if not text:
@@ -83,9 +85,7 @@ def tts_api():
             ssml = f"""
             <speak version='1.0' xml:lang='{language}'>
               <voice name='{voice}'>
-                <prosody rate='{(speed - 1) * 100:+.0f}%'>
-                  {text}
-                </prosody>
+                {text}
               </voice>
             </speak>
             """
@@ -153,16 +153,6 @@ def tts_api():
     audio_stream = BytesIO()
     tts.write_to_fp(audio_stream)
     audio_stream.seek(0)
-    if speed != 1.0:
-        sound = AudioSegment.from_file(audio_stream, format="mp3")
-        adjusted = sound._spawn(sound.raw_data, overrides={
-            "frame_rate": int(sound.frame_rate * speed)
-        }).set_frame_rate(sound.frame_rate)
-        result = BytesIO()
-        adjusted.export(result, format="mp3")
-        result.seek(0)
-        return send_file(result, mimetype="audio/mpeg")
-
     return send_file(audio_stream, mimetype="audio/mpeg")
 
 if __name__ == "__main__":
