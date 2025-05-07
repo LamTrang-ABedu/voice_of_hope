@@ -3,3 +3,4 @@ gtts
 pydub
 requests
 python-dotenv
+flask_cors
