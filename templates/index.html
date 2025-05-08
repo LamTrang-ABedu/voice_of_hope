@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/static/favicon.ico" />
+  <title>Text to Speak</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Comic Sans MS', cursive, sans-serif;
+      background: linear-gradient(to bottom, #fef6fb, #fce4ec);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+    .tts-card {
+      background-color: #fff0f5;
+      padding: 15px 25px;
+      border-radius: 2rem;
+      width: 95vw;
+      height: 90vh;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border: 3px solid #ffb6c1;
+      box-sizing: border-box;
+      position: relative;
+    }
+    .tts-card h2 {
+      font-size: 2rem;
+      color: #ff4081;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .tts-selectors {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+    .tts-selectors select {
+      font-size: 1rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 1rem;
+      background-color: #fff8f9;
+      border: 2px solid #ffc1e3;
+    }
+    textarea#ttsInput {
+      width: 100%;
+      padding: 1.2rem;
+      border-radius: 1.2rem;
+      font-size: 1.3rem;
+      background-color: #fff;
+      border: 2px solid #ffc1e3;
+      resize: none;
+      box-sizing: border-box;
+      flex-grow: 1;
+      min-height: 0;
+      margin-bottom: 1rem;
+    }
+    .tts-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 1.2rem;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .tts-buttons button {
+      padding: 0.7rem 1.6rem;
+      font-size: 1.1rem;
+      border: none;
+      border-radius: 1rem;
+      cursor: pointer;
+      background-color: #ffc4d6;
+      color: #4d194d;
+      font-weight: bold;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      min-width: 120px;
+    }
+    .tts-buttons button:hover {
+      background-color: #ff90b3;
+    }
+    .tts-buttons button img {
+      height: 1.2rem;
+    }
+    #loadingStatus {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-style: italic;
+      font-weight: bold;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 1rem 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      display: none;
+      z-index: 999;
+    }
+    @media (max-width: 768px) {
+      .tts-selectors, .tts-buttons {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="tts-card">
+    <h2>👧 Bé Tập Nói</h2>
+    <div class="tts-selectors">
+      <select id="providerSelect"></select>
+      <select id="languageSelect"></select>
+      <select id="voiceSelect"></select>
+      <select id="speedSelect">
+        <option value="0.5">🐢 Rất chậm</option>
+        <option value="0.75">🐣 Chậm</option>
+        <option value="1.0" selected>🎵 Bình thường</option>
+        <option value="1.25">✨ Hơi nhanh</option>
+        <option value="1.5">🐇 Nhanh</option>
+        <option value="2">🚗 Rất nhanh</option>
+      </select>
+    </div>
+
+    <textarea id="ttsInput" placeholder="👧 Nhập nội dung bé muốn đọc nhé...">Hello bé yêu! Cùng đọc nào!</textarea>
+
+    <div class="tts-buttons">
+      <button onclick="speakText()">
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 10v4h4l5 5V5l-5 5H3zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.06c1.48-.74 2.5-2.26 2.5-4.03zm2.5 0c0 3.04-1.64 5.64-4.1 7.03l1.43 1.43C19.07 18.27 21 15.27 21 12s-1.93-6.27-5.17-8.46l-1.43 1.43C17.36 6.36 19 8.96 19 12z"/>
+        </svg>
+        Nói
+      </button>
+      <button onclick="togglePlayPause(this)" id="pauseBtn">
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+        </svg>
+        <span style="display:inline-block; width:88px">Tạm dừng</span>
+      </button>
+      <button onclick="downloadAudio()">
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5h4v6h3v-6h4L12 2z"/>
+        </svg>
+        Tải về
+      </button>
+    </div>
+
+    <div id="loadingStatus">⏳ Đang tải giọng nói...</div>
+  </div>
+
+  <script src="/static/js/tts-script.js"></script>
+</body>
+</html>

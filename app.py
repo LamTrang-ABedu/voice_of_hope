@@ -1,6 +1,6 @@
 # tts_microservice/app.py
 
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, render_template
 import requests
 import os
 import uuid
@@ -165,5 +165,10 @@ def tts_api():
     audio_stream.seek(0)
     return send_file(audio_stream, mimetype="audio/mpeg")
 
+
+@app.route('/')
+def voice_of_hope():
+    return render_template('index.html')
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=5000)
