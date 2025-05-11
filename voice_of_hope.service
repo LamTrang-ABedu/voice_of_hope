@@ -1,0 +1,12 @@
+[Unit]
+Description=Voice of Hope Flask Service
+After=network.target
+
+[Service]
+ExecStart=/opt/hopehub/voice_of_hope/run.sh
+Restart=always
+User=ubuntu
+WorkingDirectory=/opt/hopehub/voice_of_hope
+
+[Install]
+WantedBy=multi-user.target
